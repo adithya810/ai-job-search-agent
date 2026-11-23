@@ -1,0 +1,22 @@
+# Never commit local browser sessions, cookies, credentials, or personal resumes
+.browser_profile/
+.chrome_profile/
+.env
+*.cookies
+storage_state*.json
+resumes/
+*.docx
+*.pdf
+
+# Generated outputs, local DB, trackers, logs & caches
+output/
+jobs_history.db
+agent.log
+Applied_Companies_Tracker*.xlsx
+Job_Search_Log.json
+naukri_state.json
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/

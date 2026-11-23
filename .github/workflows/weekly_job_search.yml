@@ -1,0 +1,48 @@
+name: Weekly Autonomous Job Search (Mon 11:00 & 18:00 IST)
+
+on:
+  schedule:
+    # 11:00 AM IST = 05:30 UTC, 6:00 PM IST = 12:30 UTC (every Monday)
+    - cron: '30 5,12 * * 1'
+  workflow_dispatch:
+
+jobs:
+  job-search-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies into .venv
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install requests beautifulsoup4 playwright pydantic python-dotenv
+
+      - name: Run autonomous job search agent
+        env:
+          EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+        run: |
+          .venv/bin/python agent_runner.py
+
+      - name: Upload curated digest artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-job-digest
+          path: |
+            output/weekly_digest.md
+            output/weekly_digest.json
+            agent.log

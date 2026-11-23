@@ -1,0 +1,87 @@
+{
+  "candidate_name": "Adithya Krishna",
+  "email": "adithyakrishna810@gmail.com",
+  "resume_sources": [
+    "/home/antigravity/Adithya_Krishna.docx",
+    "resumes/resume_2026-10-16.docx",
+    "resumes/resume_2026-10-26.pdf"
+  ],
+  "target_roles": [
+    "Data Analyst",
+    "Senior Data Analyst",
+    "Power BI Developer",
+    "Business Intelligence Analyst",
+    "Analytics Engineer",
+    "Generative AI Data Analyst"
+  ],
+  "experience_years": 4.5,
+  "min_experience_years": 3,
+  "experience_level": "4.5 years (Mid-Senior, >3 years)",
+  "locations": [
+    "Hyderabad, Telangana, India",
+    "Bengaluru, Karnataka, India",
+    "Pune, Maharashtra, India",
+    "India"
+  ],
+  "work_modes": [
+    "Remote",
+    "Hybrid",
+    "On-site"
+  ],
+  "key_skills": [
+    "Power BI",
+    "DAX",
+    "Power Query",
+    "Power BI Fabric",
+    "Row-Level Security (RLS)",
+    "SQL",
+    "SQL Server",
+    "SSIS",
+    "SSMS",
+    "Python",
+    "Pandas",
+    "NumPy",
+    "Matplotlib",
+    "Openpyxl",
+    "Advanced Excel",
+    "Azure",
+    "Azure Databricks",
+    "PySpark",
+    "Medallion Architecture",
+    "ETL Pipelines",
+    "Power Automate",
+    "Data Modeling",
+    "Data Validation",
+    "Machine Learning",
+    "XGBoost",
+    "Random Forest",
+    "Generative AI",
+    "LLMs",
+    "Agentic AI Workflows",
+    "MCP Connector"
+  ],
+  "exclusions": [
+    "unpaid internship",
+    "unpaid",
+    "intern",
+    "internship",
+    "fresher",
+    "trainee",
+    "apprentice",
+    "0-1 year",
+    "0-2 years"
+  ],
+  "max_age_days": 7,
+  "min_relevance_score": 7,
+  "sites": [
+    "linkedin",
+    "exa",
+    "firecrawl"
+  ],
+  "notification_target": {
+    "digest_markdown": "output/weekly_digest.md",
+    "digest_json": "output/weekly_digest.json",
+    "slack_webhook_env": "SLACK_WEBHOOK_URL",
+    "notify_email": "adithyakrishna810@gmail.com"
+  }
+}

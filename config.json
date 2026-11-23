@@ -1,0 +1,110 @@
+{
+  "email_hint": "adithyakrishna810@gmail.com",
+  "sites": [
+    "linkedin",
+    "naukri",
+    "ziprecruiter",
+    "exa",
+    "firecrawl"
+  ],
+  "queries": [
+    "Data Analyst",
+    "Senior Data Analyst",
+    "Business Data Analyst"
+  ],
+  "locations": [
+    "Bengaluru, Karnataka, India",
+    "Hyderabad, Telangana, India",
+    "Pune, Maharashtra, India",
+    "India"
+  ],
+  "min_experience_years": 3,
+  "max_age_hours": 48,
+  "strict_experience_filter": true,
+  "strict_freshness_filter": true,
+  "max_results_per_query": 20,
+  "enrich_details": true,
+  "max_detail_fetches": 40,
+  "request_delay_seconds": 1.4,
+  "profile_dir": ".browser_profile",
+  "output_dir": "output",
+  "web_search_domains": [
+    "linkedin.com/jobs",
+    "naukri.com",
+    "ziprecruiter.com"
+  ],
+  "mcp_servers": {
+    "exa": {
+      "enabled": false,
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "exa-mcp-server"],
+      "env": {
+        "EXA_API_KEY": "${EXA_API_KEY}"
+      },
+      "search_tool": "web_search_exa",
+      "query_arg": "query",
+      "limit_arg": "numResults"
+    },
+    "firecrawl": {
+      "enabled": false,
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "firecrawl-mcp"],
+      "env": {
+        "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}"
+      },
+      "search_tool": "firecrawl_search",
+      "query_arg": "query",
+      "limit_arg": "limit"
+    }
+  },
+  "core_skills": {
+    "SQL": {
+      "weight": 20,
+      "patterns": ["\\bsql\\b", "\\bmysql\\b", "\\bpostgresql\\b", "\\bpostgres\\b", "\\bt-sql\\b", "\\bpl/sql\\b", "\\bsql server\\b"]
+    },
+    "Python": {
+      "weight": 18,
+      "patterns": ["\\bpython\\b", "\\bpandas\\b", "\\bnumpy\\b", "\\bscikit-learn\\b"]
+    },
+    "Excel": {
+      "weight": 14,
+      "patterns": ["\\bexcel\\b", "\\bms excel\\b", "\\bspreadsheet\\b", "\\bpivot table\\b", "\\bvlookup\\b", "\\bxlookup\\b"]
+    },
+    "Power BI": {
+      "weight": 16,
+      "patterns": ["\\bpower\\s*bi\\b", "\\bpowerbi\\b", "\\bdax\\b", "\\bpower query\\b"]
+    },
+    "Tableau": {
+      "weight": 14,
+      "patterns": ["\\btableau\\b"]
+    }
+  },
+  "bonus_skills": {
+    "Statistics / A/B Testing": {
+      "weight": 4,
+      "patterns": ["\\bstatistics\\b", "\\bstatistical\\b", "\\ba/b testing\\b", "\\bhypothesis testing\\b"]
+    },
+    "ETL / Data Warehousing": {
+      "weight": 4,
+      "patterns": ["\\betl\\b", "\\bdata warehouse\\b", "\\bsnowflake\\b", "\\bbigquery\\b", "\\bredshift\\b", "\\bdatabricks\\b"]
+    },
+    "Looker / BI Tools": {
+      "weight": 3,
+      "patterns": ["\\blooker\\b", "\\bqlik\\b", "\\bmetabase\\b", "\\bsuperset\\b", "\\bdata studio\\b"]
+    },
+    "R": {
+      "weight": 3,
+      "patterns": ["\\br programming\\b", "\\br studio\\b", "\\brstudio\\b", "\\bpython/r\\b", "\\bpython or r\\b"]
+    },
+    "Cloud (AWS/Azure/GCP)": {
+      "weight": 2,
+      "patterns": ["\\baws\\b", "\\bazure\\b", "\\bgcp\\b", "\\bgoogle cloud\\b"]
+    },
+    "Airflow / dbt": {
+      "weight": 2,
+      "patterns": ["\\bairflow\\b", "\\bdbt\\b"]
+    }
+  }
+}
