@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Autonomous Job Search AI Agent Runner (Scheduled Mondays 11:00 AM & 6:00 PM IST).
+"""Autonomous Job Search AI Agent Runner (Scheduled Mondays 11:00 AM IST Only).
 
 Implements:
 - Phase 1: Runtime, SQLite (`jobs_history.db`), and `.env` validation
-- Phase 2: Next-run schedule calculation in Asia/Kolkata (IST)
+- Phase 2: Next-run schedule calculation in Asia/Kolkata (IST) — Mondays 11:00 AM IST
 - Phase 3: Search -> SQLite Deduplicate -> Resume Skill/Exclusion Scoring (1-10, >=7)
            -> Curated Digest Delivery (Markdown/JSON + optional Slack/SMTP)
 - Guardrails: Randomized polite delays, robots.txt checking, zero fabricated URLs,
@@ -66,6 +66,8 @@ class NotificationTarget(BaseModel):
 class UserProfile(BaseModel):
     candidate_name: str
     email: str
+    model: str = "flash-3.8"
+    schedule_cron_ist: str = "0 11 * * 1"
     resume_sources: list[str] = Field(default_factory=list)
     target_roles: list[str]
     experience_years: float = 4.5
@@ -97,13 +99,13 @@ def setup_logging(log_file: Path) -> logging.Logger:
 
 
 def next_monday_ist_runs(count: int = 4, now_ist: datetime | None = None) -> list[str]:
-    """Compute the next `count` scheduled runs (Mondays at 11:00 and 18:00 IST)."""
+    """Compute the next `count` scheduled runs (Mondays at 11:00 AM IST only)."""
     now = now_ist or datetime.now(IST)
     upcoming: list[datetime] = []
     cursor_date = now.date()
     while len(upcoming) < count:
         if cursor_date.weekday() == 0:  # Monday
-            for hour in (11, 18):
+            for hour in (11,):
                 dt = datetime(cursor_date.year, cursor_date.month, cursor_date.day, hour, 0, tzinfo=IST)
                 if dt > now:
                     upcoming.append(dt)
@@ -157,12 +159,14 @@ def format_digest_markdown(
     *,
     ran_at_ist: str,
     window_label: str,
+    model_name: str = "flash-3.8",
 ) -> str:
     """Render a clean curated Markdown digest of qualifying job opportunities."""
     lines = [
         f"# Curated Weekly Job Digest — {profile.candidate_name}",
         "",
         f"- **Generated:** {ran_at_ist}",
+        f"- **Model:** `{model_name}` | **Schedule:** Every Monday 11:00 AM IST (`0 11 * * 1`)",
         f"- **Profile:** {profile.experience_level} | Target Roles: {', '.join(profile.target_roles[:4])}",
         f"- **Freshness Window:** {window_label} | **Min Relevance:** {profile.min_relevance_score:.1f}/10",
         f"- **New Qualifying Matches:** {len(qualifying)}",
@@ -246,6 +250,7 @@ def run_autonomous_cycle(
     log_path: Path,
     max_age_hours_override: int | None = None,
     min_score_override: float | None = None,
+    model_override: str | None = None,
     max_queries: int = 3,
     max_per_query: int = 10,
     max_detail_fetches: int = 24,
@@ -271,6 +276,13 @@ def run_autonomous_cycle(
     config = SearchConfig.from_file(config_path)
     db = JobHistoryDB(db_path)
 
+    model_name = (
+        model_override
+        or os.environ.get("AGENT_MODEL")
+        or profile.model
+        or "flash-3.8"
+    )
+
     max_age_hours = (
         max_age_hours_override
         if max_age_hours_override is not None
@@ -288,8 +300,8 @@ def run_autonomous_cycle(
     ran_at_ist = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S %Z")
     upcoming = next_monday_ist_runs(4)
     logger.info("=== Autonomous Job Search Run Started (%s) ===", ran_at_ist)
-    logger.info("Candidate: %s | Exp: %s | Window: <=%dh | Min Score: %.1f/10",
-                profile.candidate_name, profile.experience_level, max_age_hours, min_score)
+    logger.info("Model: %s | Schedule: Mon 11:00 AM IST | Candidate: %s | Exp: %s | Window: <=%dh | Min Score: %.1f/10",
+                model_name, profile.candidate_name, profile.experience_level, max_age_hours, min_score)
     logger.info("Next scheduled IST runs: %s", " | ".join(upcoming[:2]))
 
     # Load Adithya's resume profiles
@@ -407,9 +419,12 @@ def run_autonomous_cycle(
         qualifying_records,
         ran_at_ist=ran_at_ist,
         window_label=window_label,
+        model_name=model_name,
     )
     digest_payload = {
         "generated_at_ist": ran_at_ist,
+        "model": model_name,
+        "schedule": "Monday 11:00 AM IST (0 11 * * 1)",
         "candidate": profile.candidate_name,
         "window": window_label,
         "min_relevance_score": min_score,
@@ -446,13 +461,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--config", type=Path, default=PROJECT_ROOT / "config.json")
     parser.add_argument("--db", type=Path, default=PROJECT_ROOT / "jobs_history.db")
     parser.add_argument("--log", type=Path, default=PROJECT_ROOT / "agent.log")
+    parser.add_argument("--model", type=str, default=None, help="Execution model identifier (default: AGENT_MODEL env or profile.model, e.g. flash-3.8)")
     parser.add_argument("--max-age-hours", type=int, help="Override freshness window in hours (default: profile.max_age_days*24)")
     parser.add_argument("--min-score", type=float, help="Override min 1-10 relevance score (default: 7.0)")
     parser.add_argument("--max-queries", type=int, default=3)
     parser.add_argument("--max-per-query", type=int, default=10)
     parser.add_argument("--max-detail-fetches", type=int, default=24)
     parser.add_argument("--require-api-keys", action="store_true", help="Exit with code 2 if EXA/FIRECRAWL keys are unset")
-    parser.add_argument("--show-next-runs", action="store_true", help="Print next scheduled Monday 11:00/18:00 IST runs and exit")
+    parser.add_argument("--show-next-runs", action="store_true", help="Print next scheduled Monday 11:00 AM IST runs and exit")
     return parser.parse_args(argv)
 
 
@@ -470,6 +486,7 @@ def main(argv: list[str] | None = None) -> int:
         log_path=args.log,
         max_age_hours_override=args.max_age_hours,
         min_score_override=args.min_score,
+        model_override=args.model,
         max_queries=args.max_queries,
         max_per_query=args.max_per_query,
         max_detail_fetches=args.max_detail_fetches,

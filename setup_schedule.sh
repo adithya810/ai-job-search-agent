@@ -5,22 +5,19 @@ PROJECT_DIR="/home/antigravity/job-search-agent"
 VENV_PY="${PROJECT_DIR}/.venv/bin/python"
 RUNNER="${PROJECT_DIR}/agent_runner.py"
 LOG_FILE="${PROJECT_DIR}/agent.log"
+MODEL="flash-3.8"
 
-CRON_JOB="0 11,18 * * 1 ${VENV_PY} ${RUNNER} >> ${LOG_FILE} 2>&1"
+# Schedule: Every Monday at 11:00 AM IST ONLY (removes all other schedules)
+CRON_JOB="0 11 * * 1 ${VENV_PY} ${RUNNER} --model ${MODEL} >> ${LOG_FILE} 2>&1"
 
-# Preserve existing non-duplicate crontab entries, enforce TZ=Asia/Kolkata
-EXISTING="$(crontab -l 2>/dev/null || true)"
-CLEANED="$(printf '%s\n' "${EXISTING}" | grep -v "${RUNNER}" | grep -v '^TZ=Asia/Kolkata$' || true)"
-
+# Replace crontab completely so ONLY the Monday 11:00 AM IST job exists
 {
   echo "TZ=Asia/Kolkata"
-  if [ -n "${CLEANED}" ]; then
-    printf '%s\n' "${CLEANED}"
-  fi
+  echo "AGENT_MODEL=${MODEL}"
   echo "${CRON_JOB}"
 } | crontab -
 
-echo "=== Verified Crontab ==="
+echo "=== Verified Crontab (Monday 11:00 AM IST Only) ==="
 crontab -l
 echo ""
 "${VENV_PY}" "${RUNNER}" --show-next-runs

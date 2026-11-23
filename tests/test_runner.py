@@ -73,17 +73,35 @@ class TestAutonomousRunner(unittest.TestCase):
             self.assertEqual(st["total_runs"], 1)
 
     def test_next_monday_ist_schedule_calculation(self) -> None:
-        # Monday Nov 23, 2026 at 17:55 IST -> next run should be 18:00 IST today, then Nov 30 11:00 & 18:00 IST
-        now = datetime(2026, 11, 23, 17, 55, tzinfo=IST)
-        runs = agent_runner.next_monday_ist_runs(3, now_ist=now)
+        # Monday Nov 23, 2026 at 17:55 IST (past 11:00 AM) -> next runs must ONLY be Monday 11:00 AM IST
+        now_past = datetime(2026, 11, 23, 17, 55, tzinfo=IST)
+        runs_past = agent_runner.next_monday_ist_runs(3, now_ist=now_past)
         self.assertEqual(
-            runs,
+            runs_past,
             [
-                "2026-11-23 18:00 IST (Monday)",
                 "2026-11-30 11:00 IST (Monday)",
-                "2026-11-30 18:00 IST (Monday)",
+                "2026-12-07 11:00 IST (Monday)",
+                "2026-12-14 11:00 IST (Monday)",
             ],
         )
+
+        # Monday Nov 23, 2026 at 09:30 IST (before 11:00 AM) -> next run is 11:00 AM today
+        now_before = datetime(2026, 11, 23, 9, 30, tzinfo=IST)
+        runs_before = agent_runner.next_monday_ist_runs(2, now_ist=now_before)
+        self.assertEqual(
+            runs_before,
+            [
+                "2026-11-23 11:00 IST (Monday)",
+                "2026-11-30 11:00 IST (Monday)",
+            ],
+        )
+
+    def test_user_profile_model_and_schedule_defaults(self) -> None:
+        prof = agent_runner.UserProfile.model_validate_json(
+            (Path(__file__).resolve().parent.parent / "profile.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(prof.model, "flash-3.8")
+        self.assertEqual(prof.schedule_cron_ist, "0 11 * * 1")
 
     def test_exclusions_filter(self) -> None:
         intern_job = JobListing(

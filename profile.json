@@ -1,6 +1,8 @@
 {
   "candidate_name": "Adithya Krishna",
   "email": "adithyakrishna810@gmail.com",
+  "model": "flash-3.8",
+  "schedule_cron_ist": "0 11 * * 1",
   "resume_sources": [
     "/home/antigravity/Adithya_Krishna.docx",
     "resumes/resume_2026-10-16.docx",

@@ -87,10 +87,27 @@ python3 -m job_agent search --mode hybrid --headed
 | `output/jobs.csv` | Excel / Google Sheets–ready table with match score, experience, posted date, matched & missing skills, and URLs |
 | `output/jobs.json` | Structured dataset including active filter stats, per-site statuses, and skill demand counts |
 | `output/dashboard.html` | Self-contained offline interactive HTML dashboard |
-| `output/seen_jobs.json` | Deduplication fingerprint history |
+## Autonomous Weekly Scheduler (Monday 11:00 AM IST Only)
+
+The agent runs autonomously on an isolated weekly schedule:
+- **Frequency:** Every Monday at **11:00 AM IST** (`Asia/Kolkata`, `05:30 UTC`). All other schedules have been removed.
+- **Execution Model:** `flash-3.8` (configured in `profile.json`, `AGENT_MODEL` env var, CLI `--model`, and GitHub Actions workflow).
+- **Pipeline:** Phase 1 Self-check -> Phase 2 Schedule verification -> Phase 3 Search (`>3y`, `<=48h`), SQLite deduplication against `jobs_history.db`, resume match scoring (1–10, keep `>=7`), and curated digest generation (`output/weekly_digest.md` & `output/weekly_digest.json`).
+
+```bash
+# Register or verify crontab for Monday 11:00 AM IST with flash-3.8 model
+./setup_schedule.sh
+
+# Preview next scheduled runs
+python3 agent_runner.py --show-next-runs
+
+# Run one manual autonomous cycle
+python3 agent_runner.py --model flash-3.8
+```
 
 ## Running Tests
 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
+
