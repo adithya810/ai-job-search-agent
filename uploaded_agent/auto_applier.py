@@ -1,6 +1,23 @@
+"""Stage 05: Apply Button Gate & Conditional Auto-Apply Executor.
+
+For every >= 80% matched job from Stage 04:
+  - Selects the best role-tailored resume variant (AI/ML, Power BI, Data Engineer, MIS, Business Analyst, Data Analyst)
+  - Inspects the job page for an available native/direct Apply button:
+      * LinkedIn `Easy Apply`
+      * Naukri `1-Click Apply` (`#apply-button`)
+      * ZipRecruiter `1-Click Apply` / `Quick Apply`
+      * Company Career Portal `Apply` / `Apply Now` + accessible ATS Submit
+  - Safety rule: Never attempts to solve or bypass CAPTCHAs, anti-bot challenges, or unauthenticated walls;
+    cleanly falls back to preserving the Direct Apply Link in Output Excel.
+  - Returns structured apply outcome so Stage 06 writes the APPLIED RESULT instead of the Apply Link
+    whenever applied, and writes the clickable Apply Link otherwise.
+"""
+
+from datetime import datetime, timedelta, timezone
 import re
 from typing import Dict, Any, List, Tuple, Optional
 from pathlib import Path
+
 from config import (
     BASE_DIR,
     LOGIN_EMAIL,
@@ -13,6 +30,12 @@ from config import (
 )
 
 RESUMES_DIR = BASE_DIR / "resumes"
+
+ANTIBOT_PATTERNS = re.compile(
+    r"(?:verify\s+you\s+are\s+human|cf-turnstile|g-recaptcha|hcaptcha|security\s+verification|"
+    r"unusual\s+traffic|please\s+complete\s+the\s+security\s+check)",
+    re.IGNORECASE,
+)
 
 RESUME_VARIANTS: List[Dict[str, Any]] = [
     {
@@ -88,6 +111,33 @@ RESUME_VARIANTS: List[Dict[str, Any]] = [
 _RESUME_TEXT_CACHE: Dict[str, str] = {}
 
 
+def _ist_now_short() -> str:
+    ist = timezone(timedelta(hours=5, minutes=30))
+    return datetime.now(ist).strftime("%Y-%m-%d %I:%M %p IST")
+
+
+def is_status_applied(status: str) -> bool:
+    """Returns True strictly when an application has been submitted or previously applied."""
+    s = (status or "").strip().lower()
+    return (
+        s.startswith("applied (")
+        or s.startswith("already applied")
+        or "auto-submitted" in s
+    )
+
+
+def _has_antibot_gate(page) -> bool:
+    """Detects CAPTCHAs or verification gates without ever interacting with them."""
+    try:
+        u = (page.url or "").lower()
+        if any(tok in u for tok in ("checkpoint/challenge", "captcha", "challenge")):
+            return True
+        html_head = (page.content() or "")[:8000]
+        return bool(ANTIBOT_PATTERNS.search(html_head))
+    except Exception:
+        return False
+
+
 def _get_resume_text(docx_path: Path) -> str:
     key = str(docx_path)
     if key in _RESUME_TEXT_CACHE:
@@ -97,6 +147,7 @@ def _get_resume_text(docx_path: Path) -> str:
         return ""
     try:
         import docx as _docx
+
         d = _docx.Document(str(docx_path))
         txt = "\n".join(p.text for p in d.paragraphs if p.text).lower()
     except Exception:
@@ -110,12 +161,10 @@ def _kw_in(text: str, keyword: str) -> bool:
 
 
 def select_resume_for_job(job: Dict[str, Any]) -> Tuple[Path, str, str]:
-    """Chooses the exact uploaded resume variant whose skills & designation best match the job."""
+    """Chooses the exact resume variant whose skills & designation best match the job."""
     title = (job.get("title") or "").lower()
     matched_skills = [str(s).lower() for s in (job.get("matched_skills") or [])]
-    body = " ".join(
-        [str(job.get(k) or "") for k in ("skills", "description")] + matched_skills
-    ).lower()
+    body = " ".join([str(job.get(k) or "") for k in ("skills", "description")] + matched_skills).lower()
 
     best: Optional[Dict[str, Any]] = None
     best_score = 0
@@ -130,7 +179,6 @@ def select_resume_for_job(job: Dict[str, Any]) -> Tuple[Path, str, str]:
 
         resume_txt = _get_resume_text(Path(src_docx)) if src_docx else ""
         title_hits = [k for k in variant["title_keywords"] if _kw_in(title, k)]
-        # Only credit JD keywords that are BOTH requested by the job AND actually present in that resume!
         jd_hits = [
             k for k in variant["jd_keywords"]
             if _kw_in(body, k) and (not resume_txt or _kw_in(resume_txt, k))
@@ -143,7 +191,7 @@ def select_resume_for_job(job: Dict[str, Any]) -> Tuple[Path, str, str]:
     if best is None or best_score < 2:
         fallback = RESUMES_DIR / "Adithya_Krishna_Data_Analyst.pdf"
         chosen = fallback if fallback.exists() else RESUME_PDF_PATH
-        return (chosen, "data_analyst", "Defaulted to Data Analyst resume (Adithya_Krishna_Data_Analyst_Resume.docx)")
+        return (chosen, "data_analyst", "Defaulted to Data Analyst resume")
 
     src_name = Path(best["source_docx"]).name if best.get("source_docx") else best["file"]
     reason = f"Source: {src_name} | Title match: {best_title_hits or ['skills-based']} | Skill overlap: {best_jd_hits[:6] or ['core']}"
@@ -163,7 +211,7 @@ def _resume_for(job: Dict[str, Any]) -> Path:
 
 
 def try_login_with_google(page, timeout_ms: int = 2500) -> bool:
-    """Detects and clicks 'Continue with Google' or 'Sign in with Google' buttons."""
+    """Detects and clicks 'Continue with Google' or 'Sign in with Google' buttons when session is active."""
     try:
         google_selectors = [
             "button:has-text('Continue with Google')",
@@ -198,22 +246,21 @@ def try_login_naukri(page) -> bool:
     try:
         page.goto("https://www.naukri.com/nlogin/login", wait_until="domcontentloaded", timeout=15000)
         page.wait_for_timeout(1500)
+        if _has_antibot_gate(page):
+            return False
         if "mnjuser" in page.url or page.locator("div.nI-gNb-drawer__icon, a[title='Profile']").count() > 0:
             return True
-        if try_login_with_google(page):
-            page.wait_for_timeout(2000)
-            if "mnjuser" in page.url:
-                return True
-        email_input = page.locator("input#usernameField, input[placeholder*='Email'], input[placeholder*='Username']").first
-        pass_input = page.locator("input#passwordField, input[type='password']").first
-        if email_input.count() > 0 and pass_input.count() > 0 and email_input.is_visible():
-            email_input.fill(LOGIN_EMAIL, timeout=2000)
-            pass_input.fill(LOGIN_PASSWORD, timeout=2000)
-            submit_btn = page.locator("button[type='submit'], button:has-text('Login')").first
-            if submit_btn.count() > 0:
-                submit_btn.click(timeout=2500)
-                page.wait_for_timeout(2500)
-                return "mnjuser" in page.url
+        if LOGIN_PASSWORD:
+            email_input = page.locator("input#usernameField, input[placeholder*='Email'], input[placeholder*='Username']").first
+            pass_input = page.locator("input#passwordField, input[type='password']").first
+            if email_input.count() > 0 and pass_input.count() > 0 and email_input.is_visible():
+                email_input.fill(LOGIN_EMAIL, timeout=2000)
+                pass_input.fill(LOGIN_PASSWORD, timeout=2000)
+                submit_btn = page.locator("button[type='submit'], button:has-text('Login')").first
+                if submit_btn.count() > 0:
+                    submit_btn.click(timeout=2500)
+                    page.wait_for_timeout(2500)
+                    return "mnjuser" in page.url
     except Exception as exc:
         print(f"[Naukri Login] Note: {exc}")
     return False
@@ -223,20 +270,23 @@ def try_login_linkedin(page) -> bool:
     try:
         page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded", timeout=15000)
         page.wait_for_timeout(1200)
+        if _has_antibot_gate(page):
+            return False
         if "feed" in page.url or "mynetwork" in page.url:
             return True
-        page.goto("https://www.linkedin.com/login", wait_until="domcontentloaded", timeout=15000)
-        page.wait_for_timeout(1200)
-        email_in = page.locator("input#username, input[name='session_key']").first
-        pass_in = page.locator("input#password, input[name='session_password']").first
-        if email_in.count() > 0 and pass_in.count() > 0 and email_in.is_visible():
-            email_in.fill(LOGIN_EMAIL, timeout=2000)
-            pass_in.fill(LOGIN_PASSWORD, timeout=2000)
-            btn = page.locator("button[type='submit']").first
-            if btn.count() > 0:
-                btn.click(timeout=2500)
-                page.wait_for_timeout(2500)
-                return "feed" in page.url
+        if LOGIN_PASSWORD:
+            page.goto("https://www.linkedin.com/login", wait_until="domcontentloaded", timeout=15000)
+            page.wait_for_timeout(1200)
+            email_in = page.locator("input#username, input[name='session_key']").first
+            pass_in = page.locator("input#password, input[name='session_password']").first
+            if email_in.count() > 0 and pass_in.count() > 0 and email_in.is_visible():
+                email_in.fill(LOGIN_EMAIL, timeout=2000)
+                pass_in.fill(LOGIN_PASSWORD, timeout=2000)
+                btn = page.locator("button[type='submit']").first
+                if btn.count() > 0:
+                    btn.click(timeout=2500)
+                    page.wait_for_timeout(2500)
+                    return "feed" in page.url
     except Exception as exc:
         print(f"[LinkedIn Login] Note: {exc}")
     return False
@@ -246,7 +296,7 @@ def try_login_indeed(page) -> bool:
     try:
         page.goto("https://in.indeed.com/", wait_until="domcontentloaded", timeout=15000)
         page.wait_for_timeout(1200)
-        if page.locator("a[data-gnav-element-name='UserMenu'], div.gnav-UserMenu").count() > 0:
+        if not _has_antibot_gate(page) and page.locator("a[data-gnav-element-name='UserMenu'], div.gnav-UserMenu").count() > 0:
             return True
     except Exception as exc:
         print(f"[Indeed Login] Note: {exc}")
@@ -254,7 +304,7 @@ def try_login_indeed(page) -> bool:
 
 
 def _fill_common_ats_fields(page, resume_path: Optional[Path] = None) -> int:
-    """Fills standard candidate details, screening questions, and resume upload on ATS portals."""
+    """Fills standard candidate details and resume upload on ATS portals."""
     filled = 0
     resume_file = resume_path if (resume_path and resume_path.exists()) else RESUME_PDF_PATH
     field_mappings = [
@@ -286,8 +336,9 @@ def _fill_common_ats_fields(page, resume_path: Optional[Path] = None) -> int:
         file_inputs = page.locator("input[type='file']").all()
         for fi in file_inputs[:2]:
             try:
-                fi.set_input_files(str(resume_file), timeout=2500)
-                filled += 1
+                if resume_file.exists():
+                    fi.set_input_files(str(resume_file), timeout=2500)
+                    filled += 1
             except Exception:
                 continue
     except Exception:
@@ -305,16 +356,19 @@ def apply_linkedin_easy_apply(page, job: Dict[str, Any]) -> Tuple[str, str]:
         page.goto(url, wait_until="domcontentloaded", timeout=15000)
         page.wait_for_timeout(1500)
 
+        if _has_antibot_gate(page):
+            return ("Apply Link Available (Verification Gate)", f"Verification gate on LinkedIn for {company}; direct link preserved.")
+
         if page.locator("span:has-text('Applied'), div:has-text('Application submitted')").count() > 0:
-            return ("Applied (Already Submitted)", f"Already applied to {company} on LinkedIn.")
+            return ("Applied (Already Submitted on LinkedIn)", f"Application already submitted to {company} on LinkedIn.")
 
         easy_btn = page.locator(
             "button.jobs-apply-button:has-text('Easy Apply'), button[aria-label*='Easy Apply']"
         ).first
         if easy_btn.count() == 0 or not easy_btn.is_visible():
             return (
-                "Skipped (External Redirect)",
-                f"LinkedIn posting for {company} has no native Easy Apply button; direct link saved.",
+                "Apply Button Not Available (External Redirect)",
+                f"No LinkedIn Easy Apply button for {company}; direct link preserved.",
             )
 
         easy_btn.click(timeout=2500)
@@ -337,9 +391,9 @@ def apply_linkedin_easy_apply(page, job: Dict[str, Any]) -> Tuple[str, str]:
             else:
                 break
 
-        return ("Processed (Portal Visited & Queued)", f"Visited LinkedIn listing for {company}; saved direct apply link.")
+        return ("Apply Link Available (Custom Questions Pending)", f"LinkedIn modal requires manual input for {company}; direct link preserved.")
     except Exception as exc:
-        return ("Processed (Direct Link Saved)", f"LinkedIn job accessed ({company}); link saved ({str(exc).splitlines()[0][:80]}).")
+        return ("Apply Link Available (Manual Apply)", f"LinkedIn link preserved ({str(exc).splitlines()[0][:80]}).")
 
 
 def apply_naukri(page, job: Dict[str, Any]) -> Tuple[str, str]:
@@ -351,29 +405,34 @@ def apply_naukri(page, job: Dict[str, Any]) -> Tuple[str, str]:
         page.goto(url, wait_until="domcontentloaded", timeout=15000)
         page.wait_for_timeout(1800)
 
+        if _has_antibot_gate(page):
+            return ("Apply Link Available (Verification Gate)", f"Verification gate on Naukri for {company}; direct link preserved.")
+
         if page.locator("span:has-text('Already Applied'), button:has-text('Already Applied')").first.count() > 0:
-            return ("Applied (Already Submitted)", f"Already applied to {company} on Naukri.")
+            return ("Applied (Already Submitted on Naukri)", f"Already applied to {company} on Naukri.")
 
         company_site_btn = page.locator(
             "button#company-site-button, button:has-text('Apply on company site'), a:has-text('Apply on company site')"
         ).first
         if company_site_btn.count() > 0 and company_site_btn.is_visible():
-            return ("Skipped (External Redirect)", f"Naukri listing for {company} redirects to external company site; link saved.")
+            return ("Apply Button Not Available (Company Site Redirect)", f"Naukri redirects to external site for {company}; direct link preserved.")
 
-        native_btn = page.locator("button#apply-button, button:has-text('Apply')").first
+        native_btn = page.locator("button#apply-button, button.apply-button:has-text('Apply')").first
         if native_btn.count() > 0 and native_btn.is_visible():
             native_btn.click(timeout=2500)
             page.wait_for_timeout(2000)
+            if "login" in (page.url or "").lower():
+                return ("Apply Link Available (Login Required)", f"Naukri session required for {company}; direct link preserved.")
             success_toast = page.locator(
-                "div.apply-success, div:has-text('successfully applied'), div:has-text('application submitted'), button#apply-button:has-text('Applied')"
+                "div.apply-success, div:has-text('successfully applied'), div:has-text('application submitted'), "
+                "button#apply-button:has-text('Applied'), span:has-text('Applied')"
             ).first
             if success_toast.count() > 0:
-                return ("Applied (Naukri 1-Click)", f"Applied to {company} via Naukri 1-Click Apply using {resume_file.name}.")
-            return ("Applied / Initiated on Portal", f"Initiated Naukri application for {company} ({resume_file.name}).")
+                return ("Applied (Naukri 1-Click Apply)", f"Applied to {company} via Naukri 1-Click Apply using {resume_file.name}.")
 
-        return ("Processed (Portal Visited & Queued)", f"Verified Naukri opening at {company}; direct application link saved.")
+        return ("Apply Button Not Available (Direct Link)", f"No 1-Click Apply confirmation on Naukri for {company}; direct link preserved.")
     except Exception as exc:
-        return ("Processed (Direct Link Saved)", f"Naukri job accessed ({company}); link saved ({str(exc).splitlines()[0][:80]}).")
+        return ("Apply Link Available (Manual Apply)", f"Naukri link preserved ({str(exc).splitlines()[0][:80]}).")
 
 
 def apply_indeed_easy_apply(page, job: Dict[str, Any]) -> Tuple[str, str]:
@@ -385,23 +444,23 @@ def apply_indeed_easy_apply(page, job: Dict[str, Any]) -> Tuple[str, str]:
         page.goto(url, wait_until="domcontentloaded", timeout=15000)
         page.wait_for_timeout(1500)
 
+        if _has_antibot_gate(page):
+            return ("Apply Link Available (Verification Gate)", f"Verification gate on Indeed for {company}; link preserved.")
+
         if page.locator("span:has-text('Already applied'), div:has-text('Already applied'), div:has-text('Application submitted')").count() > 0:
-            return ("Applied (Already Submitted)", f"Already applied to {company} on Indeed.")
+            return ("Applied (Already Submitted on Indeed)", f"Already applied to {company} on Indeed.")
 
         apply_btn = page.locator(
             "a[href*='smartapply.indeed.com'], button#indeedApplyButton, button[data-testid='indeedApplyButton'], "
-            "a:has-text('Apply now'), button:has-text('Apply now'), a:has-text('Easily apply'), button:has-text('Easily apply')"
+            "button:has-text('Apply now'), button:has-text('Easily apply')"
         ).first
 
         if apply_btn.count() == 0 or not apply_btn.is_visible():
-            ext_btn = page.locator("a:has-text('Apply on company site'), button:has-text('Apply on company site')").first
-            if ext_btn.count() > 0:
-                return ("Processed (Company Site Redirect)", f"Indeed listing for {company} redirects to external employer site.")
-            return ("Processed (Portal Visited & Queued)", f"Verified opening on Indeed ({company}); saved direct application link.")
+            return ("Apply Button Not Available (External Site)", f"No native Indeed Apply button for {company}; link preserved.")
 
         apply_btn.click(timeout=2500)
         page.wait_for_timeout(2000)
-        filled = _fill_common_ats_fields(page, resume_path=resume_file)
+        _fill_common_ats_fields(page, resume_path=resume_file)
 
         submit_btn = page.locator(
             "button:has-text('Submit your application'), button:has-text('Submit application'), button[data-testid='submit-button']"
@@ -411,43 +470,69 @@ def apply_indeed_easy_apply(page, job: Dict[str, Any]) -> Tuple[str, str]:
             page.wait_for_timeout(1500)
             return ("Applied (Indeed Easy Apply)", f"Submitted application for {company} via Indeed Easy Apply with {resume_file.name}.")
 
-        return ("Applied / Initiated on Portal", f"Initiated Indeed Easy Apply for {company} ({filled} fields pre-filled).")
+        return ("Apply Link Available (Manual Review Needed)", f"Indeed form requires manual step for {company}; link preserved.")
     except Exception as exc:
-        return ("Processed (Direct Link Saved)", f"Indeed job accessed ({company}); link saved ({str(exc).splitlines()[0][:80]}).")
+        return ("Apply Link Available (Manual Apply)", f"Indeed link preserved ({str(exc).splitlines()[0][:80]}).")
 
 
 def apply_ziprecruiter_quick_apply(page, job: Dict[str, Any]) -> Tuple[str, str]:
     url = job.get("url", "")
     company = job.get("company", "Company")
+    resume_file = _resume_for(job)
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=15000)
         page.wait_for_timeout(1500)
-        apply_btn = page.locator("button:has-text('1-Click Apply'), button:has-text('Quick Apply'), a.job_apply_button").first
+
+        if _has_antibot_gate(page):
+            return ("Apply Link Available (Verification Gate)", f"Verification gate on ZipRecruiter for {company}; link preserved.")
+
+        if page.locator("button:has-text('Applied'), span:has-text('Applied')").first.count() > 0:
+            return ("Applied (Already Submitted on ZipRecruiter)", f"Already applied to {company} on ZipRecruiter.")
+
+        apply_btn = page.locator("button:has-text('1-Click Apply'), button:has-text('Quick Apply')").first
         if apply_btn.count() == 0 or not apply_btn.is_visible():
-            return ("Processed (Portal Visited & Queued)", f"Verified opening on ZipRecruiter ({company}); direct apply link saved.")
+            return ("Apply Button Not Available (External Redirect)", f"No 1-Click/Quick Apply button on ZipRecruiter ({company}); link preserved.")
+
         apply_btn.click(timeout=2500)
         page.wait_for_timeout(1500)
-        _fill_common_ats_fields(page, resume_path=_resume_for(job))
-        return ("Applied / Initiated on Portal", f"Initiated ZipRecruiter application for {company}.")
+        _fill_common_ats_fields(page, resume_path=resume_file)
+
+        submit_btn = page.locator("button:has-text('Submit'), button:has-text('Continue'), button[type='submit']").first
+        if submit_btn.count() > 0 and submit_btn.is_visible():
+            submit_btn.click(timeout=2500)
+            page.wait_for_timeout(1500)
+
+        if page.locator("div:has-text('Application sent'), div:has-text('Applied'), span:has-text('Applied')").count() > 0:
+            return ("Applied (ZipRecruiter Quick Apply)", f"Submitted ZipRecruiter Quick Apply for {company} ({resume_file.name}).")
+
+        return ("Apply Link Available (Manual Completion Needed)", f"ZipRecruiter requires manual step for {company}; link preserved.")
     except Exception as exc:
-        return ("Processed (Direct Link Saved)", f"ZipRecruiter job accessed ({company}); link saved ({str(exc).splitlines()[0][:80]}).")
+        return ("Apply Link Available (Manual Apply)", f"ZipRecruiter link preserved ({str(exc).splitlines()[0][:80]}).")
 
 
 def apply_glassdoor_easy_apply(page, job: Dict[str, Any]) -> Tuple[str, str]:
     url = job.get("url", "")
     company = job.get("company", "Company")
+    resume_file = _resume_for(job)
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=15000)
         page.wait_for_timeout(1500)
-        apply_btn = page.locator("button[data-test='easy-apply-button'], button:has-text('Easy Apply'), button:has-text('Apply Now')").first
+        if _has_antibot_gate(page):
+            return ("Apply Link Available (Verification Gate)", f"Verification gate on Glassdoor for {company}; link preserved.")
+        apply_btn = page.locator("button[data-test='easy-apply-button'], button:has-text('Easy Apply')").first
         if apply_btn.count() == 0 or not apply_btn.is_visible():
-            return ("Processed (Portal Visited & Queued)", f"Verified opening on Glassdoor ({company}); direct apply link saved.")
+            return ("Apply Button Not Available (External Site)", f"No Easy Apply button on Glassdoor ({company}); link preserved.")
         apply_btn.click(timeout=2500)
         page.wait_for_timeout(1500)
-        _fill_common_ats_fields(page, resume_path=_resume_for(job))
-        return ("Applied / Initiated on Portal", f"Initiated Glassdoor application for {company}.")
+        _fill_common_ats_fields(page, resume_path=resume_file)
+        submit_btn = page.locator("button:has-text('Submit application'), button:has-text('Submit')").first
+        if submit_btn.count() > 0 and submit_btn.is_visible():
+            submit_btn.click(timeout=2500)
+            page.wait_for_timeout(1500)
+            return ("Applied (Glassdoor Easy Apply)", f"Submitted Glassdoor Easy Apply for {company} ({resume_file.name}).")
+        return ("Apply Link Available (Manual Apply)", f"Glassdoor manual step needed for {company}; link preserved.")
     except Exception as exc:
-        return ("Processed (Direct Link Saved)", f"Glassdoor job accessed ({company}); link saved ({str(exc).splitlines()[0][:80]}).")
+        return ("Apply Link Available (Manual Apply)", f"Glassdoor link preserved ({str(exc).splitlines()[0][:80]}).")
 
 
 def apply_official_ats(page, job: Dict[str, Any]) -> Tuple[str, str]:
@@ -459,7 +544,8 @@ def apply_official_ats(page, job: Dict[str, Any]) -> Tuple[str, str]:
         page.goto(url, wait_until="domcontentloaded", timeout=15000)
         page.wait_for_timeout(1500)
 
-        try_login_with_google(page, timeout_ms=2000)
+        if _has_antibot_gate(page):
+            return ("Apply Link Available (Verification Gate)", f"Verification gate on {company} career portal; direct link preserved.")
 
         apply_selectors = [
             "button#apply-button",
@@ -481,14 +567,22 @@ def apply_official_ats(page, job: Dict[str, Any]) -> Tuple[str, str]:
             except Exception:
                 continue
 
+        if not clicked_apply:
+            return ("Apply Button Not Available (Direct Link)", f"No direct Apply button found on {company} page; link preserved.")
+
         active_page = page.context.pages[-1] if len(page.context.pages) > 1 else page
+        if _has_antibot_gate(active_page) or any(k in (active_page.url or "").lower() for k in ("login", "signin", "auth")):
+            return ("Apply Link Available (Portal Account Login Required)", f"{company} ATS requires manual account sign-in; link preserved.")
+
         total_fields_filled = _fill_common_ats_fields(active_page, resume_path=resume_file)
+        if total_fields_filled == 0:
+            return ("Apply Link Available (Manual ATS Form)", f"{company} career portal requires custom ATS form; link preserved.")
 
         submit_selectors = [
             "button:has-text('Submit application')",
             "button:has-text('Submit Application')",
-            "button:has-text('Submit')",
             "button:has-text('Send Application')",
+            "button[type='submit']:has-text('Submit')",
         ]
         for s_sel in submit_selectors:
             try:
@@ -496,22 +590,20 @@ def apply_official_ats(page, job: Dict[str, Any]) -> Tuple[str, str]:
                 if s_btn.count() > 0 and s_btn.is_visible():
                     s_btn.click(timeout=2500)
                     active_page.wait_for_timeout(1500)
-                    return ("Applied (Official Career Portal)", f"Submitted official portal application at {company} ({total_fields_filled} fields filled).")
+                    return (
+                        "Applied (Company Career Portal)",
+                        f"Submitted official portal application at {company} ({total_fields_filled} fields filled with {resume_file.name}).",
+                    )
             except Exception:
                 continue
 
-        if clicked_apply or total_fields_filled > 0:
-            return (
-                "Applied / Initiated on Portal",
-                f"Initiated application on {company} official portal ({total_fields_filled} fields filled with {resume_file.name}).",
-            )
-
-        return ("Processed (Portal Visited & Queued)", f"Visited {company} official career portal; direct application link saved.")
+        return ("Apply Link Available (Review & Submit Required)", f"Pre-filled {total_fields_filled} fields on {company}; direct link preserved.")
     except Exception as exc:
-        return ("Processed (Direct Link Saved)", f"Official portal accessed ({company}); link saved ({str(exc).splitlines()[0][:80]}).")
+        return ("Apply Link Available (Manual Apply)", f"Official portal link preserved ({str(exc).splitlines()[0][:80]}).")
 
 
 def attempt_auto_apply(page, job: Dict[str, Any]) -> Tuple[str, str]:
+    """Checks for an available Apply button on the job's portal and submits if available."""
     portal = (job.get("portal") or "").lower()
     url = (job.get("url") or "").lower()
 
@@ -525,14 +617,24 @@ def attempt_auto_apply(page, job: Dict[str, Any]) -> Tuple[str, str]:
         job["resume_reason"] = resume_reason
 
     if "linkedin" in portal or "linkedin.com" in url:
-        return apply_linkedin_easy_apply(page, job)
+        status, notes = apply_linkedin_easy_apply(page, job)
     elif "naukri" in portal or "naukri.com" in url:
-        return apply_naukri(page, job)
+        status, notes = apply_naukri(page, job)
     elif "indeed" in portal or "indeed.com" in url:
-        return apply_indeed_easy_apply(page, job)
+        status, notes = apply_indeed_easy_apply(page, job)
     elif "ziprecruiter" in portal or "ziprecruiter" in url:
-        return apply_ziprecruiter_quick_apply(page, job)
+        status, notes = apply_ziprecruiter_quick_apply(page, job)
     elif "glassdoor" in portal or "glassdoor" in url:
-        return apply_glassdoor_easy_apply(page, job)
+        status, notes = apply_glassdoor_easy_apply(page, job)
     else:
-        return apply_official_ats(page, job)
+        status, notes = apply_official_ats(page, job)
+
+    applied_ok = is_status_applied(status)
+    job["is_applied"] = applied_ok
+    job["apply_button_available"] = applied_ok
+    if applied_ok:
+        resume_name = Path(job.get("resume_path") or RESUME_PDF_PATH).name
+        job["applied_result_display"] = f"{status} | Resume: {resume_name} | {_ist_now_short()}"
+    else:
+        job["applied_result_display"] = ""
+    return status, notes

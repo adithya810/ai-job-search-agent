@@ -176,6 +176,10 @@ def format_digest_markdown(
     ]
     for idx, item in enumerate(qualifying, start=1):
         mode_str = f" ({item['work_mode']})" if item.get("work_mode") else ""
+        if item.get("is_applied"):
+            action_line = f"- **Application Result:** **APPLIED** — {item.get('applied_result_display') or item.get('application_status', 'Submitted')}"
+        else:
+            action_line = f"- **Direct Application URL:** {item['url']}"
         lines.extend(
             [
                 f"### {idx}. {item['title']} — {item['company']}",
@@ -183,7 +187,7 @@ def format_digest_markdown(
                 f"- **Experience & Posted:** {item['experience'] or 'Verified >3y'} | Posted: {item['posted_date'] or 'Recent'}",
                 f"- **Match Score:** **{item['relevance_score']:.1f}/10** ({item['resume_match_pct']}% resume fit) — {item['fit_reason']}",
                 f"- **Best Resume:** {item['best_resume_name']}",
-                f"- **Direct Application URL:** {item['url']}",
+                action_line,
                 "",
             ]
         )
@@ -196,15 +200,26 @@ def deliver_digest(
     profile: UserProfile,
     logger: logging.Logger,
 ) -> list[str]:
-    """Write digest to local files and optionally deliver to Slack webhook or SMTP email."""
+    """Write digest & Structured Excel to local files and optionally deliver to Slack webhook or SMTP email."""
+    from job_agent.workflow import export_records_to_structured_excel
+
     delivered_to: list[str] = []
 
     md_path = PROJECT_ROOT / profile.notification_target.digest_markdown
     js_path = PROJECT_ROOT / profile.notification_target.digest_json
+    xlsx_path = md_path.parent / "Matched_Jobs_Output.xlsx"
     md_path.parent.mkdir(parents=True, exist_ok=True)
     md_path.write_text(markdown_text, encoding="utf-8")
     js_path.write_text(json.dumps(json_payload, indent=2, ensure_ascii=False), encoding="utf-8")
     delivered_to.append(f"file:{md_path}")
+
+    above_80 = [r for r in json_payload.get("qualifying_jobs", []) if float(r.get("resume_match_pct", 0)) >= 80.0]
+    if above_80:
+        try:
+            saved_xlsx = export_records_to_structured_excel(above_80, xlsx_path)
+            delivered_to.append(f"excel:{saved_xlsx}")
+        except Exception as exc:
+            logger.warning("Excel export note: %s", exc)
 
     # Optional Slack Webhook delivery
     slack_url = os.environ.get(profile.notification_target.slack_webhook_env, "").strip()

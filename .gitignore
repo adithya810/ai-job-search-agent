@@ -13,7 +13,10 @@ output/
 jobs_history.db
 agent.log
 Applied_Companies_Tracker*.xlsx
+Matched_Jobs_Output*.xlsx
 Job_Search_Log.json
+agent_memory_state.json
+applied_jobs_history.json
 naukri_state.json
 __pycache__/
 *.py[cod]

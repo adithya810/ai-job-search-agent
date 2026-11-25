@@ -29,6 +29,8 @@ COMPANY_CHECK_SHEET = BASE_DIR / "Company name.xlsx"
 APPLIED_COMPANIES_EXCEL = BASE_DIR / "Applied_Companies_Tracker.xlsx"
 JOB_DISCOVERY_LOG = BASE_DIR / "Job_Search_Log.json"
 MCP_DISCOVERED_JOBS_JSON = BASE_DIR / "mcp_discovered_jobs.json"
+AGENT_MEMORY_STATE_PATH = BASE_DIR / "agent_memory_state.json"
+APPLIED_JOBS_HISTORY_PATH = BASE_DIR / "applied_jobs_history.json"
 
 # Resume files in project folder
 RESUME_PDF_PATH = BASE_DIR / "Adithya_Krishna_Resume.pdf"

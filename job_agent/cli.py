@@ -300,6 +300,22 @@ def cmd_build_dashboard(args: argparse.Namespace, config: SearchConfig) -> int:
     return 0
 
 
+def cmd_workflow(args: argparse.Namespace, config: SearchConfig) -> int:
+    from .workflow import run_six_stage_workflow
+
+    out_xlsx = Path(args.excel_output) if args.excel_output else (config.output_dir / "Matched_Jobs_Output.xlsx")
+    summary = run_six_stage_workflow(
+        headless=not args.headed,
+        max_auto_apply=args.max_apply,
+        search_only=args.search_only,
+        max_roles=args.max_roles,
+        max_per_role=args.max_per_role,
+        output_excel_copy=out_xlsx,
+    )
+    print(f"Structured Excel copy saved to: {summary.get('output_excel_copy', summary['excel_tracker_path'])}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python3 -m job_agent",
@@ -315,6 +331,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to config.json (default: ./config.json)",
     )
     sub = parser.add_subparsers(dest="command", required=True)
+
+    p_wf = sub.add_parser(
+        "workflow",
+        help="Execute the 6-stage Agentic Workflow (Resume Parse -> Memory -> Sequential 1->4 -> >=80%% Gate -> Auto-Apply if Button Available -> Excel).",
+    )
+    p_wf.add_argument("--headed", action="store_true", help="Run Chromium in visible mode")
+    p_wf.add_argument("--max-apply", type=int, default=25, help="Maximum auto-applications when Apply button is available")
+    p_wf.add_argument("--max-roles", type=int, default=5, help="Number of target roles in Sequential Loop 1->4")
+    p_wf.add_argument("--max-per-role", type=int, default=5, help="Max results per role+location per step")
+    p_wf.add_argument("--search-only", action="store_true", help="Skip auto-apply and write clickable Apply Links to Excel")
+    p_wf.add_argument("--excel-output", help="Optional path to mirror Structured Excel output (default: output/Matched_Jobs_Output.xlsx)")
 
     p_search = sub.add_parser("search", help="Search jobs, filter (>3y, <=48h), score skills, and export reports.")
     p_search.add_argument(
@@ -361,7 +388,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_match = sub.add_parser(
         "match-resumes",
-        help="Match saved jobs against your Google Drive resumes (Gen AI, ML, Data Analyst) and build >=80% Apply Queue.",
+        help="Match saved jobs against your Google Drive resumes (Gen AI, ML, Data Analyst) and build >=80%% Apply Queue.",
     )
     p_match.add_argument("--min-match", type=int, default=80, help="Minimum resume match percentage (default: 80)")
     p_match.add_argument("--input", help="Path to jobs.json")
@@ -369,7 +396,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_apply = sub.add_parser(
         "apply",
-        help="Open >=80% matched jobs one-by-one in your visible local Chromium session for human-reviewed submission.",
+        help="Open >=80%% matched jobs one-by-one in your visible local Chromium session for human-reviewed submission.",
     )
     p_apply.add_argument("--queue", help="Path to apply_queue.json")
     p_apply.add_argument("--limit", type=int, default=10, help="Max jobs to open in one session")
@@ -401,6 +428,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     config = SearchConfig.from_file(args.config)
 
+    if args.command == "workflow":
+        return cmd_workflow(args, config)
     if args.command == "search":
         return cmd_search(args, config)
     if args.command == "login":

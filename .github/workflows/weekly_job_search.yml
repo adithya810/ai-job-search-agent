@@ -22,7 +22,7 @@ jobs:
         run: |
           python3 -m venv .venv
           .venv/bin/pip install --upgrade pip
-          .venv/bin/pip install requests beautifulsoup4 playwright pydantic python-dotenv
+          .venv/bin/pip install requests beautifulsoup4 playwright pydantic python-dotenv openpyxl python-docx reportlab
 
       - name: Run autonomous job search agent
         env:
@@ -38,7 +38,7 @@ jobs:
         run: |
           .venv/bin/python agent_runner.py --model "${AGENT_MODEL}"
 
-      - name: Upload curated digest artifact
+      - name: Upload curated digest & Excel artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -46,4 +46,5 @@ jobs:
           path: |
             output/weekly_digest.md
             output/weekly_digest.json
+            output/Matched_Jobs_Output.xlsx
             agent.log

@@ -88,7 +88,13 @@ def modify_naukri_profile_keywords(page) -> Tuple[bool, str]:
         return False, f"Naukri profile refresh note: {str(exc)[:80]}"
 
 
-def search_naukri_api_and_portal(page, freshness_days: int = 2, max_per_query: int = 8) -> List[Dict[str, Any]]:
+def search_naukri_api_and_portal(
+    page,
+    freshness_days: int = 2,
+    max_per_query: int = 8,
+    role_queries: List[str] = None,
+    locations: List[str] = None,
+) -> List[Dict[str, Any]]:
     """
     Searches Naukri.com across Hyderabad, Bengaluru, Gurugram, and Chennai for
     Data Analyst, MIS Executive, Power BI, and Python/AI roles posted within 48 hours.
@@ -97,13 +103,13 @@ def search_naukri_api_and_portal(page, freshness_days: int = 2, max_per_query: i
     discovered: List[Dict[str, Any]] = []
     seen_urls = set()
 
-    keywords = state_manager.get_todays_search_keywords(count=4)
-    locations = ["hyderabad", "bengaluru", "gurugram", "chennai"]
+    keywords = role_queries if role_queries else state_manager.get_todays_search_keywords(count=4)
+    loc_list = [l.lower() for l in (locations or ["hyderabad", "bengaluru", "gurugram", "chennai"])]
 
     from matcher import is_experience_below_4_years
 
     for kw in keywords:
-        for loc in locations[:4]:
+        for loc in loc_list[:4]:
             kw_slug = slugify(kw)
             loc_slug = slugify(loc)
             search_url = f"https://www.naukri.com/{kw_slug}-jobs-in-{loc_slug}?experience=3&jobAge={freshness_days}"
