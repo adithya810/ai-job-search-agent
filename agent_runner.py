@@ -218,7 +218,11 @@ def deliver_digest(
     above_80 = [r for r in json_payload.get("qualifying_jobs", []) if float(r.get("resume_match_pct", 0)) >= 80.0]
     if above_80:
         try:
+            import shutil
+
             saved_xlsx = export_records_to_structured_excel(above_80, xlsx_path)
+            tracker_copy = PROJECT_ROOT / "Applied_Companies_Tracker.xlsx"
+            shutil.copy2(saved_xlsx, tracker_copy)
             delivered_to.append(f"excel:{saved_xlsx}")
         except Exception as exc:
             logger.warning("Excel export note: %s", exc)

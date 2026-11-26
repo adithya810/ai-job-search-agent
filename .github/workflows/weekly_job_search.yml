@@ -39,6 +39,19 @@ jobs:
         run: |
           .venv/bin/python agent_runner.py --model "${AGENT_MODEL}" --effort "${AGENT_REASONING_EFFORT}"
 
+      - name: Email Applied_Companies_Tracker.xlsx via Gmail SMTP
+        if: success()
+        env:
+          GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          if [ -z "${GMAIL_APP_PASSWORD}" ]; then
+            echo "GMAIL_APP_PASSWORD secret is not configured; skipping email step."
+            exit 0
+          fi
+          .venv/bin/python send_jobs_email.py --if-exists
+
       - name: Upload curated digest & Excel artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -48,4 +61,5 @@ jobs:
             output/weekly_digest.md
             output/weekly_digest.json
             output/Matched_Jobs_Output.xlsx
+            Applied_Companies_Tracker.xlsx
             agent.log

@@ -270,14 +270,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Validate attachment and compose email without connecting to SMTP",
     )
+    parser.add_argument(
+        "--if-exists",
+        action="store_true",
+        help="Exit 0 silently with a notice if no Excel tracker file exists yet (for scheduled runs)",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    resolved_path = resolve_tracker_path(args.file)
+    if args.if_exists and not resolved_path.exists():
+        print(f"[send_jobs_email] No Excel tracker found at '{resolved_path}'; skipping email.")
+        return 0
+
     try:
         result = send_jobs_email(
-            excel_path=args.file,
+            excel_path=resolved_path,
             recipient_email=args.to,
             sender_email=args.sender,
             subject=args.subject,

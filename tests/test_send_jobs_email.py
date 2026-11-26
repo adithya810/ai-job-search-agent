@@ -99,6 +99,12 @@ class TestSendJobsEmail(unittest.TestCase):
             self.assertTrue(res["dry_run"])
             self.assertFalse(res["sent"])
 
+    def test_if_exists_flag_exits_zero_when_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "nonexistent_tracker.xlsx"
+            rc = send_jobs_email.main(["--file", str(missing), "--if-exists"])
+            self.assertEqual(rc, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
