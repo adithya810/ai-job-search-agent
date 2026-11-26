@@ -258,7 +258,7 @@ def load_career_pages_from_excel(excel_path: Path = COMPANY_CHECK_SHEET) -> List
                         "company": portal_cfg.get("name", comp),
                         "raw_company": comp,
                         "careers_url": careers_url,
-                        "target_roles": role_hint or "Data Analyst / MIS Executive / Power BI",
+                        "target_roles": role_hint or "Data Analyst / AI & ML Engineer / MIS / Gen AI / Power BI",
                     }
                 )
             wb.close()

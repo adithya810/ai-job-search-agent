@@ -32,19 +32,20 @@ def ensure_company_check_sheet() -> Path:
     ws = wb.active
     ws.title = "Target Companies"
     ws.append(["Company Name", "Official Careers Portal", "Target Roles"])
+    default_roles = "Data Analyst / AI & ML Engineer / MIS / Gen AI / Power BI"
     companies = [
-        ("Deloitte", OFFICIAL_COMPANY_PORTALS["deloitte"]["careers_url"], "Data Analyst / AI & ML Engineer / MIS"),
-        ("Capgemini", OFFICIAL_COMPANY_PORTALS["capgemini"]["careers_url"], "Data Analyst / Power BI / Python"),
-        ("Infosys", OFFICIAL_COMPANY_PORTALS["infosys"]["careers_url"], "Data Analyst / Python / SQL / ETL"),
-        ("Cognizant", OFFICIAL_COMPANY_PORTALS["cognizant"]["careers_url"], "Data Analyst / MIS / Power BI"),
-        ("Randstad", OFFICIAL_COMPANY_PORTALS["randstad"]["careers_url"], "Data Analyst / MIS Executive"),
-        ("NTT DATA", OFFICIAL_COMPANY_PORTALS["ntt data"]["careers_url"], "Data Analyst / Operations Analyst / AI"),
-        ("Indium Software", OFFICIAL_COMPANY_PORTALS["indium"]["careers_url"], "Data Analyst / GenAI / Databricks"),
-        ("Wipro", OFFICIAL_COMPANY_PORTALS["wipro"]["careers_url"], "MIS Executive / Data Analyst / Power BI"),
-        ("Tech Mahindra", OFFICIAL_COMPANY_PORTALS["techmahindra"]["careers_url"], "Data Analyst / BI / Python"),
-        ("Optum", OFFICIAL_COMPANY_PORTALS["optum"]["careers_url"], "Claims Reporting Analyst / Data Analyst"),
-        ("Accenture", OFFICIAL_COMPANY_PORTALS["accenture"]["careers_url"], "AI & Data Analyst / Decision Science"),
-        ("EY", OFFICIAL_COMPANY_PORTALS["ey"]["careers_url"], "Data Analyst / Power BI / Python"),
+        ("Deloitte", OFFICIAL_COMPANY_PORTALS["deloitte"]["careers_url"], default_roles),
+        ("Capgemini", OFFICIAL_COMPANY_PORTALS["capgemini"]["careers_url"], default_roles),
+        ("Infosys", OFFICIAL_COMPANY_PORTALS["infosys"]["careers_url"], default_roles),
+        ("Cognizant", OFFICIAL_COMPANY_PORTALS["cognizant"]["careers_url"], default_roles),
+        ("Randstad", OFFICIAL_COMPANY_PORTALS["randstad"]["careers_url"], default_roles),
+        ("NTT DATA", OFFICIAL_COMPANY_PORTALS["ntt data"]["careers_url"], default_roles),
+        ("Indium Software", OFFICIAL_COMPANY_PORTALS["indium"]["careers_url"], default_roles),
+        ("Wipro", OFFICIAL_COMPANY_PORTALS["wipro"]["careers_url"], default_roles),
+        ("Tech Mahindra", OFFICIAL_COMPANY_PORTALS["techmahindra"]["careers_url"], default_roles),
+        ("Optum", OFFICIAL_COMPANY_PORTALS["optum"]["careers_url"], default_roles),
+        ("Accenture", OFFICIAL_COMPANY_PORTALS["accenture"]["careers_url"], default_roles),
+        ("EY", OFFICIAL_COMPANY_PORTALS["ey"]["careers_url"], default_roles),
     ]
     for row in companies:
         ws.append(list(row))
