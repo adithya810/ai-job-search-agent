@@ -354,4 +354,10 @@ OFFICIAL_COMPANY_PORTALS = {
         "search_api_type": "ey",
         "ats_type": "successfactors",
     },
+    "hcl": {
+        "name": "HCL",
+        "careers_url": "https://careers.hcltech.com/go/NonTPDemand/9558355/",
+        "search_api_type": "hcl",
+        "ats_type": "successfactors",
+    },
 }

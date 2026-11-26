@@ -46,6 +46,7 @@ def ensure_company_check_sheet() -> Path:
         ("Optum", OFFICIAL_COMPANY_PORTALS["optum"]["careers_url"], default_roles),
         ("Accenture", OFFICIAL_COMPANY_PORTALS["accenture"]["careers_url"], default_roles),
         ("EY", OFFICIAL_COMPANY_PORTALS["ey"]["careers_url"], default_roles),
+        ("HCL", OFFICIAL_COMPANY_PORTALS["hcl"]["careers_url"], default_roles),
     ]
     for row in companies:
         ws.append(list(row))
