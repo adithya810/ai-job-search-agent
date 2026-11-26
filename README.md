@@ -72,13 +72,13 @@ python3 -m job_agent mcp-serve
 ### 3. Autonomous Weekly Scheduler (Monday 11:00 AM IST Only)
 
 - **Frequency:** Every Monday at **11:00 AM IST** (`Asia/Kolkata`, `05:30 UTC`).
-- **Execution Model:** `flash-3.8` (`profile.json`, `AGENT_MODEL`, and `.github/workflows/weekly_job_search.yml`).
+- **Execution Model:** `Hydrogen - Medium Effort` (`hydrogen-medium`, `reasoning_effort: medium` in `profile.json`, `AGENT_MODEL`, and `.github/workflows/weekly_job_search.yml`).
 - **Outputs:** `output/weekly_digest.md`, `output/weekly_digest.json`, and `output/Matched_Jobs_Output.xlsx`.
 
 ```bash
 ./setup_schedule.sh
 python3 agent_runner.py --show-next-runs
-python3 agent_runner.py --model flash-3.8
+python3 agent_runner.py --model hydrogen-medium --effort medium
 ```
 
 ## Running Tests

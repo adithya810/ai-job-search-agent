@@ -66,7 +66,8 @@ class NotificationTarget(BaseModel):
 class UserProfile(BaseModel):
     candidate_name: str
     email: str
-    model: str = "flash-3.8"
+    model: str = "hydrogen-medium"
+    reasoning_effort: str = "medium"
     schedule_cron_ist: str = "0 11 * * 1"
     resume_sources: list[str] = Field(default_factory=list)
     target_roles: list[str]
@@ -159,14 +160,15 @@ def format_digest_markdown(
     *,
     ran_at_ist: str,
     window_label: str,
-    model_name: str = "flash-3.8",
+    model_name: str = "hydrogen-medium",
+    reasoning_effort: str = "medium",
 ) -> str:
     """Render a clean curated Markdown digest of qualifying job opportunities."""
     lines = [
         f"# Curated Weekly Job Digest — {profile.candidate_name}",
         "",
         f"- **Generated:** {ran_at_ist}",
-        f"- **Model:** `{model_name}` | **Schedule:** Every Monday 11:00 AM IST (`0 11 * * 1`)",
+        f"- **Model:** `{model_name}` (Effort: `{reasoning_effort}`) | **Schedule:** Every Monday 11:00 AM IST (`0 11 * * 1`)",
         f"- **Profile:** {profile.experience_level} | Target Roles: {', '.join(profile.target_roles[:4])}",
         f"- **Freshness Window:** {window_label} | **Min Relevance:** {profile.min_relevance_score:.1f}/10",
         f"- **New Qualifying Matches:** {len(qualifying)}",
@@ -266,6 +268,7 @@ def run_autonomous_cycle(
     max_age_hours_override: int | None = None,
     min_score_override: float | None = None,
     model_override: str | None = None,
+    effort_override: str | None = None,
     max_queries: int = 3,
     max_per_query: int = 10,
     max_detail_fetches: int = 24,
@@ -295,7 +298,13 @@ def run_autonomous_cycle(
         model_override
         or os.environ.get("AGENT_MODEL")
         or profile.model
-        or "flash-3.8"
+        or "hydrogen-medium"
+    )
+    reasoning_effort = (
+        effort_override
+        or os.environ.get("AGENT_REASONING_EFFORT")
+        or profile.reasoning_effort
+        or "medium"
     )
 
     max_age_hours = (
@@ -315,8 +324,8 @@ def run_autonomous_cycle(
     ran_at_ist = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S %Z")
     upcoming = next_monday_ist_runs(4)
     logger.info("=== Autonomous Job Search Run Started (%s) ===", ran_at_ist)
-    logger.info("Model: %s | Schedule: Mon 11:00 AM IST | Candidate: %s | Exp: %s | Window: <=%dh | Min Score: %.1f/10",
-                model_name, profile.candidate_name, profile.experience_level, max_age_hours, min_score)
+    logger.info("Model: %s (effort=%s) | Schedule: Mon 11:00 AM IST | Candidate: %s | Exp: %s | Window: <=%dh | Min Score: %.1f/10",
+                model_name, reasoning_effort, profile.candidate_name, profile.experience_level, max_age_hours, min_score)
     logger.info("Next scheduled IST runs: %s", " | ".join(upcoming[:2]))
 
     # Load Adithya's resume profiles
@@ -435,10 +444,12 @@ def run_autonomous_cycle(
         ran_at_ist=ran_at_ist,
         window_label=window_label,
         model_name=model_name,
+        reasoning_effort=reasoning_effort,
     )
     digest_payload = {
         "generated_at_ist": ran_at_ist,
         "model": model_name,
+        "reasoning_effort": reasoning_effort,
         "schedule": "Monday 11:00 AM IST (0 11 * * 1)",
         "candidate": profile.candidate_name,
         "window": window_label,
@@ -476,7 +487,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--config", type=Path, default=PROJECT_ROOT / "config.json")
     parser.add_argument("--db", type=Path, default=PROJECT_ROOT / "jobs_history.db")
     parser.add_argument("--log", type=Path, default=PROJECT_ROOT / "agent.log")
-    parser.add_argument("--model", type=str, default=None, help="Execution model identifier (default: AGENT_MODEL env or profile.model, e.g. flash-3.8)")
+    parser.add_argument("--model", type=str, default=None, help="Execution model identifier (default: AGENT_MODEL env or profile.model, e.g. hydrogen-medium)")
+    parser.add_argument("--effort", type=str, default=None, choices=("low", "medium", "high"), help="Model reasoning effort level (default: AGENT_REASONING_EFFORT or medium)")
     parser.add_argument("--max-age-hours", type=int, help="Override freshness window in hours (default: profile.max_age_days*24)")
     parser.add_argument("--min-score", type=float, help="Override min 1-10 relevance score (default: 7.0)")
     parser.add_argument("--max-queries", type=int, default=3)
@@ -502,6 +514,7 @@ def main(argv: list[str] | None = None) -> int:
         max_age_hours_override=args.max_age_hours,
         min_score_override=args.min_score,
         model_override=args.model,
+        effort_override=args.effort,
         max_queries=args.max_queries,
         max_per_query=args.max_per_query,
         max_detail_fetches=args.max_detail_fetches,

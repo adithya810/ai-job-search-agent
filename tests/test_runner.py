@@ -100,7 +100,8 @@ class TestAutonomousRunner(unittest.TestCase):
         prof = agent_runner.UserProfile.model_validate_json(
             (Path(__file__).resolve().parent.parent / "profile.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(prof.model, "flash-3.8")
+        self.assertEqual(prof.model, "hydrogen-medium")
+        self.assertEqual(prof.reasoning_effort, "medium")
         self.assertEqual(prof.schedule_cron_ist, "0 11 * * 1")
 
     def test_exclusions_filter(self) -> None:
